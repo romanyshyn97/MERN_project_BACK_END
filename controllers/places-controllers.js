@@ -1,3 +1,5 @@
+const fs = require('fs');
+
 const { validationResult } = require("express-validator");
 const mongoose = require("mongoose");
 
@@ -69,8 +71,7 @@ const createPlace = async (req, res, next) => {
     description,
     address,
     location: coordinates,
-    image:
-      "https://fastly.4sqi.net/img/general/600x600/4960763_61G4G6QjVzxarx5DMJQT9gSUQrYb_ibx3nSvymMQMvs.jpg",
+    image: req.file.path,
     creator
   });
 
@@ -156,6 +157,8 @@ const deletePlace = async (req, res, next) => {
     return next(error);
   }
 
+  const imagePath = place.image;
+
   try {
     const sess = await mongoose.startSession();
     sess.startTransaction();
@@ -167,6 +170,8 @@ const deletePlace = async (req, res, next) => {
     const error = new HttpError("Could not delete a place", 500);
     return next(error);
   }
+
+  fs.unlink(imagePath, err => console.log(err));
 
   res.status(200).json({ message: "Deleted place" });
 };
