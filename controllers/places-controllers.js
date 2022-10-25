@@ -1,4 +1,4 @@
-const fs = require('fs');
+const fs = require("fs");
 
 const { validationResult } = require("express-validator");
 const mongoose = require("mongoose");
@@ -7,7 +7,6 @@ const HttpError = require("../models/http-error");
 const getCoordsForAddress = require("../util/location");
 const PlaceSchema = require("../models/place-schema");
 const UserSchema = require("../models/user-schema");
-
 
 const getPlaceById = async (req, res, next) => {
   const placeId = req.params.placeId;
@@ -57,7 +56,7 @@ const createPlace = async (req, res, next) => {
     next(new HttpError("Invalid inputs passed, check your data"));
   }
 
-  const { title, description, address, creator } = req.body;
+  const { title, description, address } = req.body;
 
   let coordinates;
   try {
@@ -72,12 +71,12 @@ const createPlace = async (req, res, next) => {
     address,
     location: coordinates,
     image: req.file.path,
-    creator
+    creator: req.userData.userId,
   });
 
   let userExist;
   try {
-    userExist = await UserSchema.findById(creator);
+    userExist = await UserSchema.findById(req.userData.userId);
   } catch (err) {
     const error = new HttpError("Creating place failed", 500);
     return next(error);
@@ -103,8 +102,6 @@ const createPlace = async (req, res, next) => {
   res.status(201).json({ place: createdPlace });
 };
 
-
-
 const updatePlace = async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -122,6 +119,10 @@ const updatePlace = async (req, res, next) => {
       "Something went wrong, could not update place",
       500
     );
+    return next(error);
+  }
+  if (place.creator.toString() !== req.userData.userId) {
+    const error = new HttpError("You are not allowed to edit this place", 403);
     return next(error);
   }
 
@@ -146,14 +147,22 @@ const deletePlace = async (req, res, next) => {
 
   let place;
   try {
-    place = await PlaceSchema.findById(placeId).populate('creator');
+    place = await PlaceSchema.findById(placeId).populate("creator");
   } catch (err) {
     const error = new HttpError("Could not delete a place", 500);
     return next(error);
   }
 
-  if(!place){
-    const error = new HttpError('Could not find place for this id', 404);
+  if (!place) {
+    const error = new HttpError("Could not find place for this id", 404);
+    return next(error);
+  }
+
+  if (place.creator.id !== req.userData.userId) {
+    const error = new HttpError(
+      "You are not allowed to delete this place",
+      403
+    );
     return next(error);
   }
 
@@ -162,16 +171,16 @@ const deletePlace = async (req, res, next) => {
   try {
     const sess = await mongoose.startSession();
     sess.startTransaction();
-    await place.remove({session: sess});
+    await place.remove({ session: sess });
     place.creator.places.pull(place);
-    await place.creator.save({session: sess});
+    await place.creator.save({ session: sess });
     await sess.commitTransaction();
   } catch (err) {
     const error = new HttpError("Could not delete a place", 500);
     return next(error);
   }
 
-  fs.unlink(imagePath, err => console.log(err));
+  fs.unlink(imagePath, (err) => console.log(err));
 
   res.status(200).json({ message: "Deleted place" });
 };
